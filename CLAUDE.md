@@ -9,6 +9,39 @@ npm run dev       # Start Vite dev server at http://localhost:5173
 npm run build     # Production build to dist/
 npm run preview   # Preview the production build locally
 ```
+## Git Commit Message Rules
+
+Every commit message must start with one of the following tags:
+
+| Tag | When to use |
+|---|---|
+| `[ADD]` | New feature, file, or asset added |
+| `[FIX]` | Bug fix or correction |
+| `[UPDATE]` | Enhancement or change to existing feature |
+| `[REMOVE]` | Deleted code, file, or feature |
+| `[REFACTOR]` | Code restructured without behavior change |
+| `[STYLE]` | Formatting, naming, visual tweaks only |
+| `[DOCS]` | Documentation or CLAUDE.md changes |
+| `[CHORE]` | Config, dependencies, build scripts |
+
+### Format
+
+```
+[TAG] Short description (50 chars or less)
+
+Optional longer explanation if needed.
+```
+
+### Examples
+
+```
+[ADD] Pause menu with Resume and Restart buttons
+[FIX] Ball clipping through paddle at high speed
+[UPDATE] Increase ball speed each time bricks cleared
+[REMOVE] Unused debug overlay from GameScene
+[CHORE] Add GitHub Actions deploy workflow
+[DOCS] Document GitHub Pages and Vercel deployment
+```
 
 ## Architecture
 
