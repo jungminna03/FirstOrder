@@ -10,16 +10,16 @@ export default class PauseScene extends Phaser.Scene {
 
     this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.55);
 
-    this.add.text(width / 2, height / 2 - 160, 'PAUSED', {
+    this.add.text(width / 2, height / 2 - 160, '일시 정지', {
       fontSize: '96px', fontStyle: 'bold', color: '#ffffff', fontFamily: 'Arial',
     }).setOrigin(0.5);
 
-    this._makeButton(width / 2, height / 2 + 20, 'RESUME', () => {
+    this._makeButton(width / 2, height / 2 + 20, '계속하기', () => {
       this.scene.resume('GameScene');
       this.scene.stop();
     });
 
-    this._makeButton(width / 2, height / 2 + 160, 'RESTART', () => {
+    this._makeButton(width / 2, height / 2 + 160, '처음부터', () => {
       this.scene.stop();
       this.scene.stop('GameScene');
       this.scene.start('GameScene');

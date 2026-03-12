@@ -11,7 +11,7 @@ export default class PerkScene extends Phaser.Scene {
     const { width, height } = this.scale;
 
     this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.78);
-    this.add.text(width / 2, height / 2 - 280, 'CHOOSE A PERK', {
+    this.add.text(width / 2, height / 2 - 280, '퍽을 선택하세요', {
       fontSize: '72px', fontStyle: 'bold', color: '#fdd835', fontFamily: 'Arial',
     }).setOrigin(0.5);
 

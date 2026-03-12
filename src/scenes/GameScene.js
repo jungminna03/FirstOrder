@@ -109,8 +109,8 @@ export default class GameScene extends Phaser.Scene {
 
     // HUD
     const hudFont = { fontSize: '36px', color: '#ffffff', fontFamily: 'Arial' };
-    this.scoreText = this.add.text(30, 24, 'Score: 0', hudFont);
-    this.levelText = this.add.text(width / 2, 24, 'Level 1', {
+    this.scoreText = this.add.text(30, 24, '점수: 0', hudFont);
+    this.levelText = this.add.text(width / 2, 24, '레벨 1', {
       ...hudFont, color: '#fdd835',
     }).setOrigin(0.5, 0);
 
@@ -121,7 +121,7 @@ export default class GameScene extends Phaser.Scene {
     this.add.text(30, 106, 'EXP', { fontSize: '22px', color: '#888888', fontFamily: 'Arial' });
 
     const isMobile = !this.sys.game.device.os.desktop;
-    this.launchMsg = isMobile ? 'Tap to launch' : 'Click or SPACE to launch';
+    this.launchMsg = isMobile ? '탭하여 발사' : '클릭 또는 SPACE로 발사';
     this.promptText = this.add.text(width / 2, height / 2, this.launchMsg, {
       fontSize: '42px', color: '#aaaaaa', fontFamily: 'Arial',
     }).setOrigin(0.5);
@@ -130,7 +130,7 @@ export default class GameScene extends Phaser.Scene {
     const btnX = width - 90, btnY = height - 60;
     this._summonBtnBounds = { x: btnX - 80, y: btnY - 35, w: 160, h: 70 };
     this._summonBg = this.add.rectangle(btnX, btnY, 160, 70, 0x1565c0, 0.85).setDepth(10);
-    this._summonLabel = this.add.text(btnX, btnY - 8, '+ BALL', {
+    this._summonLabel = this.add.text(btnX, btnY - 8, '+ 볼', {
       fontSize: '30px', color: '#ffffff', fontFamily: 'Arial', fontStyle: 'bold',
     }).setOrigin(0.5).setDepth(10);
     this._summonCdText = this.add.text(btnX, btnY + 18, '[X]', {
@@ -294,7 +294,7 @@ export default class GameScene extends Phaser.Scene {
       const bx = brick.x, by = brick.y, bcol = brick.col;
       brick.destroy();
       this.score += 10;
-      this.scoreText.setText(`Score: ${this.score}`);
+      this.scoreText.setText(`점수: ${this.score}`);
       this._burst(bx, by);
       this.addExp(EXP_PER_KILL);
       // Chain Reaction: 30% chance to damage adjacent bricks
@@ -329,24 +329,24 @@ export default class GameScene extends Phaser.Scene {
       this.exp = 0;
       this.expFill.width = 0;
       this.level++;
-      this.levelText.setText(`Level ${this.level}`);
+      this.levelText.setText(`레벨 ${this.level}`);
       this.scene.pause();
       this.scene.launch('PerkScene', { perks: this._getPerkOptions() });
     }
   }
 
   _getPerkOptions() {
-    const stackLabel = (cur, max) => cur >= max ? ` (MAX)` : ` (${cur}/${max})`;
+    const stackLabel = (cur, max) => cur >= max ? ` (최대)` : ` (${cur}/${max})`;
     const all = [
-      { id: 'hydraBar',      label: 'Hydra Bar',      desc: 'Balls hitting the bar\nsplit into 3' },
-      { id: 'heavyMetal',    label: 'Heavy Metal',    desc: 'Ball Power +1\nBall Speed -15%' },
-      { id: 'ghostBall',     label: 'Ghost Ball',     desc: 'Balls pierce\nthrough 1 brick' },
-      { id: 'magnetBar',     label: 'Magnet Bar',     desc: 'Bar width +20%' },
-      { id: 'chainReaction', label: 'Chain Reaction', desc: '30% chance to\ndamage adjacent bricks' },
+      { id: 'hydraBar',      label: '히드라 바',    desc: '바에 맞은 볼이\n3개로 분열' },
+      { id: 'heavyMetal',    label: '헤비 메탈',    desc: '볼 파워 +1\n볼 속도 -15%' },
+      { id: 'ghostBall',     label: '고스트 볼',    desc: '볼이 브릭 1개\n관통 후 튕김' },
+      { id: 'magnetBar',     label: '마그넷 바',    desc: '바 너비 +20%' },
+      { id: 'chainReaction', label: '연쇄 반응',    desc: '30% 확률로\n인접 브릭 추가 피해' },
       {
         id: 'overdrive',
-        label: 'Overdrive' + stackLabel(this.overdriveStacks, 3),
-        desc: `Ball Speed +20%\n(Current: x${this.ballSpeedMult.toFixed(2)})`,
+        label: '오버드라이브' + stackLabel(this.overdriveStacks, 3),
+        desc: `볼 속도 +20%\n(현재: x${this.ballSpeedMult.toFixed(2)})`,
       },
     ].filter(p => !(p.id === 'overdrive' && this.overdriveStacks >= 3));
     return Phaser.Utils.Array.Shuffle(all).slice(0, 3);
@@ -405,7 +405,7 @@ export default class GameScene extends Phaser.Scene {
     this._summonBg.setFillStyle(onCd ? 0x424242 : 0x1565c0, 0.85);
     this._summonLabel.setColor(onCd ? '#888888' : '#ffffff');
     if (this.pendingBall) {
-      this._summonCdText.setText('waiting');
+      this._summonCdText.setText('대기 중');
     } else {
       this._summonCdText.setText(onCd ? `${Math.ceil(this.summonCooldown / 1000)}s` : '[X]');
     }
@@ -564,13 +564,13 @@ export default class GameScene extends Phaser.Scene {
 
     const { width, height } = this.scale;
     this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.7);
-    this.add.text(width / 2, height / 2 - 140, 'GAME OVER', {
+    this.add.text(width / 2, height / 2 - 140, '게임 오버', {
       fontSize: '108px', fontStyle: 'bold', color: '#e53935', fontFamily: 'Arial',
     }).setOrigin(0.5);
-    this.add.text(width / 2, height / 2, `Score: ${this.score}`, {
+    this.add.text(width / 2, height / 2, `점수: ${this.score}`, {
       fontSize: '64px', color: '#ffffff', fontFamily: 'Arial',
     }).setOrigin(0.5);
-    this.add.text(width / 2, height / 2 + 140, this.launchMsg.replace('launch', 'play again'), {
+    this.add.text(width / 2, height / 2 + 140, this.launchMsg.replace('발사', '다시 시작'), {
       fontSize: '40px', color: '#aaaaaa', fontFamily: 'Arial',
     }).setOrigin(0.5);
   }
