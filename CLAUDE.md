@@ -43,6 +43,10 @@ Optional longer explanation if needed.
 [DOCS] Document GitHub Pages and Vercel deployment
 ```
 
+## Project Specification
+
+See [`docs/MECHANICS.md`](docs/MECHANICS.md) for the full game mechanics spec (scenes, paddle, ball, bricks, scoring, lives, pause system, end states, controls). Update that file whenever mechanics change.
+
 ## Architecture
 
 This is a Phaser 3 game using ES modules bundled with Vite.
@@ -80,9 +84,9 @@ Register a new scene by importing it in `src/main.js` and adding it to the `scen
 - Deployed automatically via GitHub Actions on every push to `master`.
 - `vite.config.js` sets `base: '/FirstOrder/'` so assets resolve correctly under the subpath.
 
-### Vercel (optional)
+### Vercel (active)
 
+- **URL:** https://firstorder-game.vercel.app
+- Linked to the GitHub repo; auto-deploys on every push to `master`.
 - The `.vercel` directory is gitignored.
-- To connect Vercel: run `vercel` in the project root or import the repo at https://vercel.com/new.
-- Set the **Build Command** to `npm run build` and **Output Directory** to `dist`.
-- Vercel will auto-deploy on every push once linked.
+- `vite.config.js` uses `base: '/'` for Vercel (root deployment), and `base: '/FirstOrder/'` only when `GITHUB_ACTIONS=true`.

@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import GameScene from './scenes/GameScene.js';
 import PauseScene from './scenes/PauseScene.js';
+import PerkScene  from './scenes/PerkScene.js';
 
 const config = {
   type: Phaser.AUTO,
@@ -8,14 +9,14 @@ const config = {
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,
-    width: 800,
-    height: 600,
+    width: 1080,
+    height: 1920,
   },
   physics: {
     default: 'arcade',
     arcade: { gravity: { y: 0 }, debug: false },
   },
-  scene: [GameScene, PauseScene],
+  scene: [GameScene, PauseScene, PerkScene],
 };
 
 new Phaser.Game(config);
