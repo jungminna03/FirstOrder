@@ -80,7 +80,9 @@ export default class GameScene extends Phaser.Scene {
       .setOrigin(1, 0);
 
     // Launch prompt
-    this.promptText = this.add.text(width / 2, height / 2 + 60, 'SPACE or click to launch', {
+    const isMobile = !this.sys.game.device.os.desktop;
+    this.launchMsg = isMobile ? 'Tap to launch' : 'SPACE or click to launch';
+    this.promptText = this.add.text(width / 2, height / 2 + 60, this.launchMsg, {
       fontSize: '18px', color: '#aaaaaa',
     }).setOrigin(0.5);
 
@@ -206,7 +208,7 @@ export default class GameScene extends Phaser.Scene {
     this.ball.body.setVelocity(0, 0);
     this.ball.x = this.paddle.x;
     this.ball.y = this.paddle.y - 22;
-    this.promptText.setText('SPACE or click to launch').setVisible(true);
+    this.promptText.setText(this.launchMsg).setVisible(true);
   }
 
   updateLivesHUD() {
@@ -233,7 +235,7 @@ export default class GameScene extends Phaser.Scene {
       fontSize: '28px', color: '#ffffff',
     }).setOrigin(0.5);
 
-    this.add.text(width / 2, height / 2 + 70, 'SPACE or click to play again', {
+    this.add.text(width / 2, height / 2 + 70, this.launchMsg.replace('launch', 'play again'), {
       fontSize: '18px', color: '#aaaaaa',
     }).setOrigin(0.5);
   }
