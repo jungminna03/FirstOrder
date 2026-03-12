@@ -11,8 +11,9 @@ const DESCENT_SPEED    = 80;   // px/s initial
 const BASE_HP          = 1;
 const EXP_PER_KILL     = 10;
 const EXP_TO_PERK      = 100;
-const SPAWN_DELAY_INIT = 2800; // ms
-const SPAWN_DELAY_MIN  = 700;
+const SPAWN_DELAY_INIT  = 2800; // ms
+const SPAWN_DELAY_MIN   = 700;
+const ADD_BALL_COOLDOWN = 12000; // ms
 
 const ROW_COLORS = [0xe53935, 0xfb8c00, 0xfdd835, 0x43a047, 0x1e88e5, 0x8e24aa];
 
@@ -50,19 +51,22 @@ export default class GameScene extends Phaser.Scene {
   create() {
     const { width, height } = this.scale;
 
-    this.score         = 0;
-    this.exp           = 0;
-    this.level         = 1;
-    this.descentSpeed  = DESCENT_SPEED;
-    this.spawnDelay    = SPAWN_DELAY_INIT;
-    this.ballDamage    = 1;
-    this.hydraBar      = false;
-    this.ghostBall     = false;
-    this.chainReaction = false;
-    this.gameOver      = false;
-    this.ballOnPaddle  = true;
-    this.colorIndex    = 0;
-    this.waveCount     = 0;
+    this.score           = 0;
+    this.exp             = 0;
+    this.level           = 1;
+    this.descentSpeed    = DESCENT_SPEED;
+    this.spawnDelay      = SPAWN_DELAY_INIT;
+    this.ballDamage      = 1;
+    this.hydraBar        = false;
+    this.ghostBall       = false;
+    this.chainReaction   = false;
+    this.gameOver        = false;
+    this.pendingBall     = null;   // ball sitting on paddle waiting to launch
+    this.colorIndex      = 0;
+    this.waveCount       = 0;
+    this.summonCooldown  = 0;
+    this.overdriveStacks = 0;
+    this.ballSpeedMult   = 1.0;
 
     // No bottom wall — balls recycle instead of dying
     this.physics.world.setBoundsCollision(true, true, true, false);
@@ -122,10 +126,22 @@ export default class GameScene extends Phaser.Scene {
       fontSize: '42px', color: '#aaaaaa', fontFamily: 'Arial',
     }).setOrigin(0.5);
 
+    // Summon button (bottom-right)
+    const btnX = width - 90, btnY = height - 60;
+    this._summonBtnBounds = { x: btnX - 80, y: btnY - 35, w: 160, h: 70 };
+    this._summonBg = this.add.rectangle(btnX, btnY, 160, 70, 0x1565c0, 0.85).setDepth(10);
+    this._summonLabel = this.add.text(btnX, btnY - 8, '+ BALL', {
+      fontSize: '30px', color: '#ffffff', fontFamily: 'Arial', fontStyle: 'bold',
+    }).setOrigin(0.5).setDepth(10);
+    this._summonCdText = this.add.text(btnX, btnY + 18, '[X]', {
+      fontSize: '22px', color: '#90caf9', fontFamily: 'Arial',
+    }).setOrigin(0.5).setDepth(10);
+
     // Controls
     this.cursors = this.input.keyboard.createCursorKeys();
     this.input.keyboard.on('keydown-SPACE', this.onLaunch, this);
     this.input.keyboard.on('keydown-ESC',   this.togglePause, this);
+    this.input.keyboard.on('keydown-X',     this.onAddBall,  this);
     this.input.on('pointerdown', this.onLaunch, this);
     this.input.on('pointermove', p => { if (!this.gameOver) this.movePaddleTo(p.x); });
 
@@ -203,6 +219,7 @@ export default class GameScene extends Phaser.Scene {
     ball.ghost          = this.ghostBall;
     ball.pierces        = this.ghostBall ? 1 : 0;
     ball.paddleCooldown = 0;
+    this.pendingBall    = ball;
     return ball;
   }
 
@@ -227,10 +244,11 @@ export default class GameScene extends Phaser.Scene {
     );
 
     // Spec formula: Vx = relativeImpact × MaxHorizontalSpeed
-    // Vy derived from Pythagorean theorem so total speed = BALL_SPEED.
+    // Vy derived from Pythagorean theorem so total speed = effectiveSpeed.
     // Center hit (relativeImpact = 0) → vx = 0 → ball goes straight up.
+    const effectiveSpeed = BALL_SPEED * this.ballSpeedMult;
     let vx = relativeImpact * MAX_H_SPEED;
-    let vy = -Math.sqrt(Math.max(0, BALL_SPEED * BALL_SPEED - vx * vx));
+    let vy = -Math.sqrt(Math.max(0, effectiveSpeed * effectiveSpeed - vx * vx));
 
     // ±8° jitter as a rotation of the full velocity vector
     const jitter = Phaser.Math.FloatBetween(-8, 8) * (Math.PI / 180);
@@ -256,7 +274,7 @@ export default class GameScene extends Phaser.Scene {
         const cosR = Math.cos(rad), sinR = Math.sin(rad);
         let bvx = vx * cosR - vy * sinR;
         let bvy = vx * sinR + vy * cosR;
-        // Normalize to BALL_SPEED
+        // Normalize to effectiveSpeed
         const len = Math.sqrt(bvx * bvx + bvy * bvy) || 1;
         const nb = this.balls.create(ball.x, ball.y, 'ball');
         nb.setCollideWorldBounds(true).setBounce(1);
@@ -264,7 +282,7 @@ export default class GameScene extends Phaser.Scene {
         nb.ghost          = this.ghostBall;
         nb.pierces        = this.ghostBall ? 1 : 0;
         nb.paddleCooldown = 250;
-        nb.body.setVelocity(bvx / len * BALL_SPEED, bvy / len * BALL_SPEED);
+        nb.body.setVelocity(bvx / len * effectiveSpeed, bvy / len * effectiveSpeed);
       }
     }
   }
@@ -318,13 +336,19 @@ export default class GameScene extends Phaser.Scene {
   }
 
   _getPerkOptions() {
+    const stackLabel = (cur, max) => cur >= max ? ` (MAX)` : ` (${cur}/${max})`;
     const all = [
       { id: 'hydraBar',      label: 'Hydra Bar',      desc: 'Balls hitting the bar\nsplit into 3' },
       { id: 'heavyMetal',    label: 'Heavy Metal',    desc: 'Ball Power +1\nBall Speed -15%' },
       { id: 'ghostBall',     label: 'Ghost Ball',     desc: 'Balls pierce\nthrough 1 brick' },
       { id: 'magnetBar',     label: 'Magnet Bar',     desc: 'Bar width +20%' },
       { id: 'chainReaction', label: 'Chain Reaction', desc: '30% chance to\ndamage adjacent bricks' },
-    ];
+      {
+        id: 'overdrive',
+        label: 'Overdrive' + stackLabel(this.overdriveStacks, 3),
+        desc: `Ball Speed +20%\n(Current: x${this.ballSpeedMult.toFixed(2)})`,
+      },
+    ].filter(p => !(p.id === 'overdrive' && this.overdriveStacks >= 3));
     return Phaser.Utils.Array.Shuffle(all).slice(0, 3);
   }
 
@@ -334,11 +358,24 @@ export default class GameScene extends Phaser.Scene {
     if (id === 'chainReaction') { this.chainReaction = true; }
     if (id === 'heavyMetal') {
       this.ballDamage++;
+      this.ballSpeedMult *= 0.85;
+      const spd = BALL_SPEED * this.ballSpeedMult;
       this.balls.getChildren().forEach(b => {
         if (!b.active) return;
         const vel = b.body.velocity;
         const len = Math.sqrt(vel.x * vel.x + vel.y * vel.y) || 1;
-        b.body.setVelocity(vel.x / len * BALL_SPEED * 0.85, vel.y / len * BALL_SPEED * 0.85);
+        b.body.setVelocity(vel.x / len * spd, vel.y / len * spd);
+      });
+    }
+    if (id === 'overdrive') {
+      this.overdriveStacks++;
+      this.ballSpeedMult = Math.min(2.0, this.ballSpeedMult * 1.2);
+      const spd = BALL_SPEED * this.ballSpeedMult;
+      this.balls.getChildren().forEach(b => {
+        if (!b.active) return;
+        const vel = b.body.velocity;
+        const len = Math.sqrt(vel.x * vel.x + vel.y * vel.y) || 1;
+        b.body.setVelocity(vel.x / len * spd, vel.y / len * spd);
       });
     }
     if (id === 'magnetBar') {
@@ -350,6 +387,30 @@ export default class GameScene extends Phaser.Scene {
 
   // ─── Pause ────────────────────────────────────────────────────────────────
 
+  onAddBall() {
+    if (this.gameOver) return;
+    if (this.pendingBall) return;   // already one waiting on paddle
+    if (this.summonCooldown > 0) return;
+
+    // Spawn a new ball on the paddle — other balls keep flying
+    this._placeBallOnPaddle();
+    this.promptText.setText(this.launchMsg).setVisible(true);
+
+    this.summonCooldown = ADD_BALL_COOLDOWN;
+    this._updateSummonBtn();
+  }
+
+  _updateSummonBtn() {
+    const onCd = this.summonCooldown > 0 || !!this.pendingBall;
+    this._summonBg.setFillStyle(onCd ? 0x424242 : 0x1565c0, 0.85);
+    this._summonLabel.setColor(onCd ? '#888888' : '#ffffff');
+    if (this.pendingBall) {
+      this._summonCdText.setText('waiting');
+    } else {
+      this._summonCdText.setText(onCd ? `${Math.ceil(this.summonCooldown / 1000)}s` : '[X]');
+    }
+  }
+
   togglePause() {
     if (this.gameOver) return;
     this.scene.pause();
@@ -358,25 +419,33 @@ export default class GameScene extends Phaser.Scene {
 
   // ─── Input ────────────────────────────────────────────────────────────────
 
-  onLaunch() {
+  onLaunch(pointer) {
+    // Route button taps to add-ball
+    if (pointer && pointer.x !== undefined) {
+      const b = this._summonBtnBounds;
+      if (pointer.x >= b.x && pointer.x <= b.x + b.w &&
+          pointer.y >= b.y && pointer.y <= b.y + b.h) {
+        this.onAddBall();
+        return;
+      }
+    }
     if (this.gameOver) { this.scene.restart(); return; }
-    if (!this.ballOnPaddle) return;
-    this.ballOnPaddle = false;
+    if (!this.pendingBall) return;
+
+    const ball = this.pendingBall;
+    this.pendingBall = null;
     this.promptText.setVisible(false);
-    const b = this.balls.getFirstAlive();
-    if (b) b.body.setVelocity(Phaser.Math.Between(-200, 200), -BALL_SPEED);
-    // Resume brick descent
+    ball.body.setVelocity(Phaser.Math.Between(-200, 200), -(BALL_SPEED * this.ballSpeedMult));
+    // Resume brick descent (only matters after auto-respawn freeze)
     this._syncBrickSpeed();
+    this._updateSummonBtn();
   }
 
   movePaddleTo(x) {
     const half = this.paddle.displayWidth / 2;
     const cx   = Phaser.Math.Clamp(x, half, this.scale.width - half);
     this.paddle.x = cx;
-    if (this.ballOnPaddle) {
-      const b = this.balls.getFirstAlive();
-      if (b) b.x = cx;
-    }
+    if (this.pendingBall) this.pendingBall.x = cx;
   }
 
   // ─── Particles ────────────────────────────────────────────────────────────
@@ -411,9 +480,12 @@ export default class GameScene extends Phaser.Scene {
     // Lock paddle to fixed Y
     this.paddle.y = this.scale.height - 100;
     this.paddle.body.setVelocityY(0);
-    if (this.ballOnPaddle) {
-      const b = this.balls.getFirstAlive();
-      if (b) b.x = this.paddle.x;
+    if (this.pendingBall) this.pendingBall.x = this.paddle.x;
+
+    // Summon cooldown tick
+    if (this.summonCooldown > 0) {
+      this.summonCooldown = Math.max(0, this.summonCooldown - delta);
+      this._updateSummonBtn();
     }
 
     // Tick hit cooldowns
@@ -426,20 +498,18 @@ export default class GameScene extends Phaser.Scene {
 
     // Manual tunnel-check: catches fast balls that skip past Phaser's discrete
     // overlap detection in a single frame. Fires onBallHitPaddle directly.
-    if (!this.ballOnPaddle) {
-      const paddleTop  = this.paddle.y - this.paddle.displayHeight / 2;
-      const paddleLeft = this.paddle.x - this.paddle.displayWidth / 2;
-      const paddleRight= this.paddle.x + this.paddle.displayWidth / 2;
-      this.balls.getChildren().forEach(ball => {
-        if (!ball.active || ball.paddleCooldown > 0) return;
-        if (ball.body.velocity.y <= 0) return;
-        const ballBottom = ball.y + ball.displayHeight / 2;
-        if (ballBottom >= paddleTop && ball.y < this.paddle.y &&
-            ball.x >= paddleLeft && ball.x <= paddleRight) {
-          this.onBallHitPaddle(ball);
-        }
-      });
-    }
+    const paddleTop  = this.paddle.y - this.paddle.displayHeight / 2;
+    const paddleLeft = this.paddle.x - this.paddle.displayWidth / 2;
+    const paddleRight= this.paddle.x + this.paddle.displayWidth / 2;
+    this.balls.getChildren().forEach(ball => {
+      if (!ball.active || ball === this.pendingBall || ball.paddleCooldown > 0) return;
+      if (ball.body.velocity.y <= 0) return;
+      const ballBottom = ball.y + ball.displayHeight / 2;
+      if (ballBottom >= paddleTop && ball.y < this.paddle.y &&
+          ball.x >= paddleLeft && ball.x <= paddleRight) {
+        this.onBallHitPaddle(ball);
+      }
+    });
 
     // Loss condition: any brick reaches the Bar
     for (const brick of this.bricks.getChildren()) {
@@ -449,34 +519,32 @@ export default class GameScene extends Phaser.Scene {
       }
     }
 
-    // Recycle balls that fall below screen
+    // Recycle balls that fall below screen (skip pending ball on paddle)
     this.balls.getChildren().forEach(ball => {
+      if (ball === this.pendingBall) return;
       if (ball.active && ball.y > this.scale.height + 30) {
         ball.setActive(false).setVisible(false);
         ball.body.setVelocity(0, 0);
       }
     });
 
-    // Anti-horizontal lock
-    if (!this.ballOnPaddle) {
-      this.balls.getChildren().forEach(ball => {
-        if (!ball.active) return;
-        if (Math.abs(ball.body.velocity.y) < MIN_V_SPEED) {
-          ball.body.setVelocityY(ball.body.velocity.y >= 0 ? MIN_V_SPEED : -MIN_V_SPEED);
-        }
-      });
-    }
+    // Anti-horizontal lock (skip pending ball)
+    this.balls.getChildren().forEach(ball => {
+      if (!ball.active || ball === this.pendingBall) return;
+      if (Math.abs(ball.body.velocity.y) < MIN_V_SPEED) {
+        ball.body.setVelocityY(ball.body.velocity.y >= 0 ? MIN_V_SPEED : -MIN_V_SPEED);
+      }
+    });
 
-    // All balls gone → reset one to paddle and freeze bricks
-    const hasActive = this.balls.getChildren().some(b => b.active);
-    if (!hasActive && !this.ballOnPaddle) {
-      this.ballOnPaddle = true;
+    // All flying balls gone → auto-respawn on paddle and freeze bricks
+    const flyingBalls = this.balls.getChildren().filter(b => b.active && b !== this.pendingBall);
+    if (flyingBalls.length === 0 && !this.pendingBall) {
       this._placeBallOnPaddle();
       this.promptText.setText(this.launchMsg).setVisible(true);
-      // Freeze bricks while ball is on paddle
       this.bricks.getChildren().forEach(b => {
         if (b.active) b.body.setVelocityY(0);
       });
+      this._updateSummonBtn();
     }
 
     // Destroy bricks that slip past the bottom (memory cleanup after game over check)
@@ -489,6 +557,7 @@ export default class GameScene extends Phaser.Scene {
 
   endGame() {
     this.gameOver = true;
+    this.pendingBall = null;
     this.balls.getChildren().forEach(b => {
       if (b.active) { b.body.setVelocity(0, 0); b.setVisible(false); }
     });

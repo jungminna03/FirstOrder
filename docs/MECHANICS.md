@@ -1,95 +1,111 @@
-# 📂 MASTER SPECIFICATION: Chaos-Bar Roguelike (Phaser 3)
+# 📂 마스터 명세서: 카오스 바 로그라이크 (Phaser 3)
 
-## 1. Game Overview
-A mobile-first, Roguelike-RPG spin on the Breakout genre. The player doesn't focus on catching a single ball to survive, but on **positioning the Bar to multiply a "flow" of balls** to destroy a continuous stream of descending bricks.
-
----
-
-## 2. Platform & Display (Mobile First)
-- **Orientation:** Portrait Mode (9:16 aspect ratio).
-- **Target Resolution:** 1080 x 1920 (scaled to fit).
-- **Input:** Touch/Pointer Drag (Paddle follows finger X-position with a vertical offset).
+## 1. 게임 개요
+모바일 우선, 브레이크아웃 장르의 로그라이크-RPG 변형. 플레이어는 단일 볼을 살려서 생존하는 것이 아니라, **바의 위치를 조정해 볼의 "흐름"을 늘려** 계속 내려오는 브릭들을 파괴하는 것에 집중한다.
 
 ---
 
-## 3. Core Mechanics
+## 2. 플랫폼 및 화면 (모바일 우선)
+- **방향:** 세로 모드 (9:16 비율).
+- **목표 해상도:** 1080 x 1920 (화면에 맞게 스케일).
+- **입력:** 터치/포인터 드래그 (패들이 손가락 X 위치를 수직 오프셋과 함께 따라감).
 
-### 3.1 The Bar (Multiplier Factory)
-- **No Life Loss:** Balls falling below are recycled.
-- **Function:** Multiplies balls on impact.
+---
 
-### 3.2 The Bricks & Early Game Balance (CRITICAL)
-- **Initial Difficulty (Level 1):** - The game must start with **only 1 or 2 rows** of bricks.
-  - **Brick HP:** Level 1 bricks must have exactly **1 or 2 HP**.
-  - **Ball Power:** Default Ball Power is **1**.
-  - **Goal:** Early bricks should be destroyed in **1-2 hits** to allow fast EXP gain.
-- **Continuous Descent:** Bricks move down. Game over if they reach the Bar.
-- **Waterfall Spawning:** New bricks spawn at the top algorithmically.
+## 3. 핵심 메카닉
 
-### 3.3 Dynamic Brick Spawning Algorithm (The "Waterfall")
-- **Initial State:** The game starts with a **single sparse row** (1–2 bricks). Bricks are not pre-spawned in a full grid.
-- **Spawn Location:** New bricks are generated at the top of the screen ($y < 0$), hidden from view until they move into the play area.
-- **Spawn Timing:** A new row of bricks is generated every `T` seconds. `T` decreases slightly as the game progresses to increase pressure.
-- **Density Ramp:** Each wave's brick count increases gradually.
+### 3.1 바 (증폭기 공장)
+- **목숨 없음:** 아래로 떨어진 볼은 재활용된다.
+- **기능:** 충돌 시 볼을 증폭시킨다.
+
+### 3.2 브릭 & 초반 게임 밸런스 (중요)
+- **초기 난이도 (레벨 1):**
+  - 게임은 **1~2줄**의 브릭으로 시작해야 한다.
+  - **브릭 HP:** 레벨 1 브릭은 정확히 **1~2 HP**를 가져야 한다.
+  - **볼 파워:** 기본 볼 파워는 **1**.
+  - **목표:** 초반 브릭은 **1~2번** 타격으로 파괴되어 빠른 EXP 획득이 가능해야 한다.
+- **연속 하강:** 브릭이 아래로 이동한다. 바에 닿으면 게임 오버.
+- **폭포수 스폰:** 알고리즘적으로 새 브릭이 상단에서 스폰된다.
+
+### 3.3 다이나믹 브릭 스폰 알고리즘 ("폭포수")
+- **초기 상태:** 게임은 **한 줄의 성긴 행** (1~2개 브릭)으로 시작한다. 브릭이 가득 찬 그리드로 미리 스폰되지 않는다.
+- **스폰 위치:** 새 브릭은 화면 상단 ($y < 0$)에서 생성되어, 플레이 영역으로 내려올 때까지 보이지 않는다.
+- **스폰 타이밍:** `T`초마다 새로운 브릭 행이 생성된다. 게임이 진행될수록 `T`가 약간 감소하여 압박이 높아진다.
+- **밀도 증가:** 각 웨이브의 브릭 수가 점차 증가한다.
   - `density = clamp(0.15 + (waveCount - 1) × 0.036, 0.15, 1.0)`
-  - Wave 1: ~1–2 bricks | Wave 10: ~4–5 bricks | Wave 25+: up to 10 bricks (full row)
-  - At least 1 brick is always guaranteed per wave.
-  - This creates a non-linear escalation from easy opener to intense late-game pressure.
+  - 웨이브 1: ~1~2개 | 웨이브 10: ~4~5개 | 웨이브 25+: 최대 10개 (꽉 찬 행)
+  - 웨이브당 최소 1개의 브릭은 항상 보장된다.
+  - 이를 통해 쉬운 시작에서 치열한 후반 압박으로 비선형적 에스컬레이션이 이루어진다.
 
 ---
 
-## 4. The "Golden Rule" of Ball-Paddle Collision (No Default Bounce)
+## 4. 볼-패들 충돌의 "황금 규칙" (기본 바운스 없음)
 
-To fix the "Static Bounce Angle" bug, the `onPaddleHit` function must **ABORT** Phaser's default physics calculation and apply this **Manual Velocity Override**:
+"정적 바운스 각도" 버그를 수정하기 위해, `onPaddleHit` 함수는 Phaser의 기본 물리 계산을 **중단**하고 이 **수동 속도 오버라이드**를 적용해야 한다:
 
-### A. Step 1: Prevent Tunnelling (Clipping Fix)
-- Immediately set `ball.y = paddle.y - (paddle.displayHeight / 2) - (ball.displayHeight / 2) - 2;`
-- This ensures the ball is physically ABOVE the paddle before the velocity changes.
+### A. 1단계: 터널링 방지 (클리핑 수정)
+- 즉시 `ball.y = paddle.y - (paddle.displayHeight / 2) - (ball.displayHeight / 2) - 2;` 설정.
+- 이를 통해 속도가 변경되기 전에 볼이 물리적으로 패들 위에 위치하도록 보장한다.
 
-### B. Step 2: The Directional Formula (X-Offset Logic)
-The ball's horizontal direction MUST be dictated by where it hits the bar.
-1. **Calculate Distance:** `let diff = ball.x - paddle.x;`
-2. **Normalize:** `let percentage = diff / (paddle.width / 2);` (This gives a value between -1.0 and 1.0)
-3. **Set Velocity X:** `ball.setVelocityX(percentage * MaxHorizontalSpeed);`
-  - **Center Hit (0):** Bounces straight up (Velocity X ≈ 0).
-  - **Far Right Hit (1.0):** Bounces sharply to the right.
-  - **Far Left Hit (-1.0):** Bounces sharply to the left.
-4. **Set Velocity Y:** `ball.setVelocityY(-Math.abs(ball.body.velocity.y));` (Force upward movement)
+### B. 2단계: 방향 공식 (X 오프셋 로직)
+볼의 수평 방향은 바의 어느 부분에 맞았는지에 따라 결정되어야 한다.
+1. **거리 계산:** `let diff = ball.x - paddle.x;`
+2. **정규화:** `let percentage = diff / (paddle.width / 2);` (결과값: -1.0 ~ 1.0)
+3. **X 속도 설정:** `ball.setVelocityX(percentage * MaxHorizontalSpeed);`
+   - **중앙 타격 (0):** 수직으로 올라감 (속도 X ≈ 0).
+   - **오른쪽 끝 타격 (1.0):** 오른쪽으로 급경사.
+   - **왼쪽 끝 타격 (-1.0):** 왼쪽으로 급경사.
+4. **Y 속도 설정:** `ball.setVelocityY(-Math.abs(ball.body.velocity.y));` (위쪽 방향 강제)
 
-### C. Step 3: Anti-Loop Jitter
-- Add a tiny random value to the final X velocity: `ball.body.velocity.x += (Math.random() - 0.5) * 20;`
-- This prevents the ball from getting stuck in a perfect vertical or horizontal loop.
+### C. 3단계: 루프 방지 지터
+- 최종 X 속도에 작은 랜덤 값 추가: `ball.body.velocity.x += (Math.random() - 0.5) * 20;`
+- 이를 통해 볼이 완벽한 수직 또는 수평 루프에 갇히는 것을 방지한다.
 
-### D. Critical Implementation Rule
-- Do **NOT** rely on `ball.setBounce(1)`.
-- In the collision callback, you must explicitly set the velocities. If the ball is still bouncing incorrectly, use `ball.body.stop()` for a millisecond before applying the new velocities to clear the old physics state.
-
----
-
-## 5. RPG & Perk System
-
-### 5.1 Experience (EXP) & Leveling
-- **EXP Gain:** Destroying a brick grants EXP.
-- **Level Up:** When EXP is full, the game **PAUSES** and the **Perk Selection UI** appears.
-
-### 5.2 Perk Pool (Choose 1 of 3)
-1. **Hydra Bar:** Balls hitting the bar split into 3 (Fan-out pattern).
-2. **Heavy Metal:** Ball Power +10, but Ball Speed -15%.
-3. **Ghost Ball:** Balls pierce through 1 brick before bouncing.
-4. **Magnet Bar:** Increases Bar width by 20%.
-5. **Chain Reaction:** Destroyed bricks have a chance to damage adjacent bricks.
+### D. 중요 구현 규칙
+- `ball.setBounce(1)`에 **의존하지 말 것**.
+- 충돌 콜백에서 속도를 명시적으로 설정해야 한다. 볼이 여전히 잘못 튕기면, `ball.body.stop()`을 잠깐 실행한 후 새 속도를 적용하여 이전 물리 상태를 초기화한다.
 
 ---
 
-## 6. Technical Implementation (For Claude)
-- **Physics:** Ensure `paddle.body.immovable = true`.
-- **Velocity Override:** Call `setVelocityX` *after* the collision event to ensure the custom angle is applied.
+## 5. RPG & 퍽 시스템
+
+### 5.1 경험치 (EXP) & 레벨업
+- **EXP 획득:** 브릭 파괴 시 EXP 획득.
+- **레벨업:** EXP가 가득 차면 게임이 **일시 정지**되고 **퍽 선택 UI**가 나타난다.
+
+### 5.2 퍽 풀 (3개 중 1개 선택)
+1. **히드라 바:** 바에 맞은 볼이 3개로 분열 (부채꼴 패턴).
+2. **헤비 메탈:** 볼 파워 +1, 볼 속도 -15%.
+3. **고스트 볼:** 볼이 브릭 1개를 관통 후 튕김.
+4. **마그넷 바:** 바 너비 +20%.
+5. **연쇄 반응:** 파괴된 브릭이 인접 브릭에 데미지를 줄 확률 발생.
+6. **오버드라이브 (최대 3중첩):** 볼 속도 +20%.
 
 ---
 
-## 7. Controls Summary (Mobile)
+## 6. 다시 돌아오는 시스템 (볼 재활용)
 
-| Input | Action |
+모든 볼이 화면 아래로 떨어지면 게임 오버가 되지 않는다. 대신 다음 절차를 따른다:
+
+1. **볼 비활성화:** 화면 하단(`y > 화면 높이 + 30`)을 벗어난 볼은 비활성화되어 재활용된다.
+2. **패들 위에 재배치:** 활성 볼이 하나도 없으면, 새 볼이 자동으로 패들 위에 생성된다.
+3. **브릭 이동 정지:** 볼이 패들 위에 있는 동안 모든 브릭의 하강이 멈춘다.
+4. **발사 대기:** "탭하여 발사" 안내 문구가 다시 표시되며, 플레이어가 발사할 때 브릭 하강이 재개된다.
+
+> 이 시스템 덕분에 플레이어는 실수 후에도 계속 플레이할 수 있으며, 순수한 생존보다는 **브릭 파괴와 EXP 획득**에 집중할 수 있다.
+
+---
+
+## 7. 기술 구현 (Claude용)
+- **물리:** `paddle.body.immovable = true` 확인.
+- **속도 오버라이드:** 커스텀 각도가 적용되도록 충돌 이벤트 *이후* `setVelocityX` 호출.
+
+---
+
+## 8. 조작 요약 (모바일)
+
+| 입력 | 동작 |
 |---|---|
-| **Pointer Drag (X)** | Move Bar horizontally |
-| **UI Buttons** | Select Perks / Resume / Restart |
+| **포인터 드래그 (X)** | 바 수평 이동 |
+| **UI 버튼** | 퍽 선택 / 재개 / 재시작 |
+| **↓ PULL 버튼 / X 키** | 가장 높은 볼을 아래로 당김 (8초 쿨다운) |
