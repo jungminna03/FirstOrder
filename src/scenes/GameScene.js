@@ -10,7 +10,8 @@ const MIN_V_SPEED      = 140;
 const DESCENT_SPEED    = 80;   // px/s initial
 const BASE_HP          = 1;
 const EXP_PER_KILL     = 10;
-const EXP_TO_PERK      = 100;
+const EXP_BASE         = 100;   // 레벨업 기준 EXP (×1.4^(level-1) 로 증가)
+const HYDRA_MAX_BALLS  = 8;     // 히드라 증식으로 만들 수 있는 최대 공 수
 const SPAWN_DELAY_INIT  = 2800; // ms
 const SPAWN_DELAY_MIN   = 700;
 const ADD_BALL_COOLDOWN = 12000; // ms
@@ -67,6 +68,7 @@ export default class GameScene extends Phaser.Scene {
     this.summonCooldown  = 0;
     this.overdriveStacks = 0;
     this.ballSpeedMult   = 1.0;
+    this.extraBalls      = 0;   // +볼 버튼으로 추가한 누적 공 수 (히드라 캡에 합산)
 
     // No bottom wall — balls recycle instead of dying
     this.physics.world.setBoundsCollision(true, true, true, false);
@@ -267,14 +269,16 @@ export default class GameScene extends Phaser.Scene {
 
     this._burst(ball.x, ball.y);
 
-    // Hydra Bar: split into 3 (fan-out ±30°)
+    // Hydra Bar: split into 3 (fan-out ±30°), capped at HYDRA_MAX_BALLS + extraBalls
     if (this.hydraBar) {
+      const maxBalls = HYDRA_MAX_BALLS + this.extraBalls;
       for (const offsetDeg of [-30, 30]) {
+        const flyingNow = this.balls.getChildren().filter(b => b.active && b !== this.pendingBall).length;
+        if (flyingNow >= maxBalls) break;
         const rad  = offsetDeg * (Math.PI / 180);
         const cosR = Math.cos(rad), sinR = Math.sin(rad);
         let bvx = vx * cosR - vy * sinR;
         let bvy = vx * sinR + vy * cosR;
-        // Normalize to effectiveSpeed
         const len = Math.sqrt(bvx * bvx + bvy * bvy) || 1;
         const nb = this.balls.create(ball.x, ball.y, 'ball');
         nb.setCollideWorldBounds(true).setBounce(1);
@@ -321,11 +325,16 @@ export default class GameScene extends Phaser.Scene {
 
   // ─── EXP & Perks ─────────────────────────────────────────────────────────
 
+  _expToNext(level) {
+    return Math.floor(EXP_BASE * Math.pow(1.4, level - 1));
+  }
+
   addExp(amount) {
     this.exp += amount;
+    const needed = this._expToNext(this.level);
     const barW = this.expBg.width;
-    this.expFill.width = Math.min(this.exp / EXP_TO_PERK, 1) * barW;
-    if (this.exp >= EXP_TO_PERK) {
+    this.expFill.width = Math.min(this.exp / needed, 1) * barW;
+    if (this.exp >= needed) {
       this.exp = 0;
       this.expFill.width = 0;
       this.level++;
@@ -337,19 +346,50 @@ export default class GameScene extends Phaser.Scene {
 
   _getPerkOptions() {
     const stackLabel = (cur, max) => cur >= max ? ` (최대)` : ` (${cur}/${max})`;
-    const all = [
-      { id: 'hydraBar',      label: '히드라 바',    desc: '바에 맞은 볼이\n3개로 분열' },
-      { id: 'heavyMetal',    label: '헤비 메탈',    desc: '볼 파워 +1\n볼 속도 -15%' },
-      { id: 'ghostBall',     label: '고스트 볼',    desc: '볼이 브릭 1개\n관통 후 튕김' },
-      { id: 'magnetBar',     label: '마그넷 바',    desc: '바 너비 +20%' },
-      { id: 'chainReaction', label: '연쇄 반응',    desc: '30% 확률로\n인접 브릭 추가 피해' },
+
+    // ★ Common (레벨 1~)
+    const COMMON = [
+      { id: 'magnetBar',     tier: 'common',   label: '★ 마그넷 바',  desc: '바 너비 +20%' },
+      { id: 'chainReaction', tier: 'common',   label: '★ 연쇄 반응',  desc: '30% 확률로\n인접 브릭 추가 피해' },
+    ];
+    // ★★ Uncommon (레벨 3~)
+    const UNCOMMON = [
+      { id: 'ghostBall',  tier: 'uncommon', label: '★★ 고스트 볼',     desc: '볼이 브릭 1개\n관통 후 튕김' },
+      { id: 'heavyMetal', tier: 'uncommon', label: '★★ 헤비 메탈',     desc: '볼 파워 +1\n볼 속도 -15%' },
       {
-        id: 'overdrive',
-        label: '오버드라이브' + stackLabel(this.overdriveStacks, 3),
+        id: 'overdrive', tier: 'uncommon',
+        label: '★★ 오버드라이브' + stackLabel(this.overdriveStacks, 3),
         desc: `볼 속도 +20%\n(현재: x${this.ballSpeedMult.toFixed(2)})`,
       },
     ].filter(p => !(p.id === 'overdrive' && this.overdriveStacks >= 3));
-    return Phaser.Utils.Array.Shuffle(all).slice(0, 3);
+    // ★★★ Rare (레벨 5~)
+    const RARE = [
+      { id: 'hydraBar', tier: 'rare', label: '★★★ 히드라 바', desc: `볼이 바에 맞으면\n3개로 분열 (최대 ${HYDRA_MAX_BALLS}+추가볼)` },
+    ];
+
+    // 레벨에 따라 풀 구성
+    const pool = [...COMMON];
+    if (this.level >= 3) pool.push(...UNCOMMON);
+    if (this.level >= 5) pool.push(...RARE);
+
+    // 등급 가중치 (레벨별 조정)
+    const weights = { common: 50, uncommon: 35, rare: 15 };
+
+    // 가중치 기반 비복원 추출 3장
+    const result = [];
+    const remaining = [...pool];
+    while (result.length < 3 && remaining.length > 0) {
+      const total = remaining.reduce((s, p) => s + weights[p.tier], 0);
+      let rand = Math.random() * total;
+      let picked = remaining.length - 1;
+      for (let i = 0; i < remaining.length; i++) {
+        rand -= weights[remaining[i].tier];
+        if (rand <= 0) { picked = i; break; }
+      }
+      result.push(remaining[picked]);
+      remaining.splice(picked, 1);
+    }
+    return result;
   }
 
   applyPerk(id) {
@@ -393,6 +433,7 @@ export default class GameScene extends Phaser.Scene {
     if (this.summonCooldown > 0) return;
 
     // Spawn a new ball on the paddle — other balls keep flying
+    this.extraBalls++;
     this._placeBallOnPaddle();
     this.promptText.setText(this.launchMsg).setVisible(true);
 
