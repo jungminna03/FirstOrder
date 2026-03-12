@@ -89,6 +89,7 @@ export default class GameScene extends Phaser.Scene {
     // Controls
     this.cursors = this.input.keyboard.createCursorKeys();
     this.input.keyboard.on('keydown-SPACE', this.launchOrRestart, this);
+    this.input.keyboard.on('keydown-ESC', this.togglePause, this);
     this.input.on('pointerdown', this.launchOrRestart, this);
     this.input.on('pointermove', (p) => {
       if (!this.gameOver) this.movePaddleTo(p.x);
@@ -135,6 +136,14 @@ export default class GameScene extends Phaser.Scene {
     if (this.bricks.countActive() === 0) {
       this.endGame(true);
     }
+  }
+
+  // ─── Pause ────────────────────────────────────────────────────────────────
+
+  togglePause() {
+    if (this.gameOver) return;
+    this.scene.pause();
+    this.scene.launch('PauseScene');
   }
 
   // ─── Input ────────────────────────────────────────────────────────────────

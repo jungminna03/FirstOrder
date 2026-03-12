@@ -32,3 +32,24 @@ export default class MyScene extends Phaser.Scene {
 ```
 
 Register a new scene by importing it in `src/main.js` and adding it to the `scene` array in the config.
+
+## GitHub
+
+- **Repository:** https://github.com/jungminna03/FirstOrder
+- Branch: `master`
+- Every push to `master` triggers the GitHub Actions workflow (`.github/workflows/deploy.yml`) which builds the project and deploys it to GitHub Pages.
+
+## Deployment
+
+### GitHub Pages (active)
+
+- **URL:** https://jungminna03.github.io/FirstOrder/
+- Deployed automatically via GitHub Actions on every push to `master`.
+- `vite.config.js` sets `base: '/FirstOrder/'` so assets resolve correctly under the subpath.
+
+### Vercel (optional)
+
+- The `.vercel` directory is gitignored.
+- To connect Vercel: run `vercel` in the project root or import the repo at https://vercel.com/new.
+- Set the **Build Command** to `npm run build` and **Output Directory** to `dist`.
+- Vercel will auto-deploy on every push once linked.
