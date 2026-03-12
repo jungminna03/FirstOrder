@@ -43,6 +43,10 @@ Optional longer explanation if needed.
 [DOCS] Document GitHub Pages and Vercel deployment
 ```
 
+## Coding Style
+
+- **항상 Edit(diff) 방식으로 파일 수정** — 완전 재작성이 필요한 경우에만 Write 사용.
+
 ## Project Specification
 
 See [`docs/MECHANICS.md`](docs/MECHANICS.md) for the full game mechanics spec (scenes, paddle, ball, bricks, scoring, lives, pause system, end states, controls). Update that file whenever mechanics change.
