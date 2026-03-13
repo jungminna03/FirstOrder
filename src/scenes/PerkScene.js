@@ -1,4 +1,7 @@
 import Phaser from 'phaser';
+import { playSound } from '../audio/AudioManager.js';
+
+const FONT = "'Orbitron', Arial";
 
 const TIER_STYLE = {
   common:    { bg: 0x1a1a2e, bgHover: 0x2a2a4e, border: 0x666688, titleColor: '#aaaacc' },
@@ -19,7 +22,7 @@ export default class PerkScene extends Phaser.Scene {
 
     this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.78);
     this.add.text(width / 2, height / 2 - 280, '퍽을 선택하세요', {
-      fontSize: '72px', fontStyle: 'bold', color: '#fdd835', fontFamily: 'Arial',
+      fontSize: '72px', fontStyle: 'bold', color: '#fdd835', fontFamily: FONT,
     }).setOrigin(0.5);
 
     const gap    = 320;
@@ -47,12 +50,12 @@ export default class PerkScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true });
 
     const title = this.add.text(x, y - 40, perk.label, {
-      fontSize: '30px', fontStyle: 'bold', color: '#ffffff', fontFamily: 'Arial',
+      fontSize: '30px', fontStyle: 'bold', color: '#ffffff', fontFamily: FONT,
       wordWrap: { width: 260 }, align: 'center',
     }).setOrigin(0.5);
 
     this.add.text(x, y + 36, perk.desc, {
-      fontSize: '24px', color: '#aaaacc', fontFamily: 'Arial',
+      fontSize: '24px', color: '#aaaacc', fontFamily: FONT,
       align: 'center', wordWrap: { width: 250 },
     }).setOrigin(0.5);
 
@@ -65,6 +68,7 @@ export default class PerkScene extends Phaser.Scene {
       title.setStyle({ color: '#ffffff' });
     });
     card.on('pointerdown', () => {
+      playSound('perk_select');
       this.scene.get('GameScene').applyPerk(perk.id);
       this.scene.resume('GameScene');
       this.scene.stop();

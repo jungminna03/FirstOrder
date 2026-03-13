@@ -1,4 +1,10 @@
 import Phaser from 'phaser';
+import { playSound } from '../audio/AudioManager.js';
+import { App } from '@capacitor/app';
+import { Haptics, ImpactStyle } from '@capacitor/haptics';
+import { StatusBar, Style } from '@capacitor/status-bar';
+
+const FONT = "'Orbitron', Arial";
 
 const COLS             = 10;
 const BRICK_W          = 100;
@@ -55,6 +61,8 @@ export default class GameScene extends Phaser.Scene {
     this.score           = 0;
     this.exp             = 0;
     this.level           = 1;
+    this.startTime       = this.time.now;
+    this.collectedPerks  = [];
     this.descentSpeed    = DESCENT_SPEED;
     this.spawnDelay      = SPAWN_DELAY_INIT;
     this.ballDamage      = 1;
@@ -103,11 +111,23 @@ export default class GameScene extends Phaser.Scene {
     // No bottom wall — balls recycle instead of dying
     this.physics.world.setBoundsCollision(true, true, true, false);
 
+    // ── Apply meta upgrades ───────────────────────────────────────────────
+    const upgSpeed  = parseInt(localStorage.getItem('fo_upg_speed')  || '0', 10);
+    const upgPaddle = parseInt(localStorage.getItem('fo_upg_paddle') || '0', 10);
+    const upgSpawn  = parseInt(localStorage.getItem('fo_upg_spawn')  || '0', 10);
+    if (upgSpeed  > 0) this.ballSpeedMult = 1.0 + upgSpeed  * 0.05;
+    this._addBallCooldownBase = ADD_BALL_COOLDOWN - upgSpawn * 1000;
+
     // Paddle
     this.paddle = this.physics.add.image(width / 2, height - 100, 'paddle')
       .setImmovable(true)
       .setCollideWorldBounds(true);
     this.paddle.body.allowGravity = false;
+    if (upgPaddle > 0) {
+      const newW = 180 * (1 + upgPaddle * 0.1);
+      this.paddle.setDisplaySize(newW, this.paddle.displayHeight);
+      this.paddle.body.setSize(newW, this.paddle.displayHeight);
+    }
 
     // Object pools
     this.bricks = this.physics.add.group();
@@ -141,7 +161,7 @@ export default class GameScene extends Phaser.Scene {
     );
 
     // HUD
-    const hudFont = { fontSize: '36px', color: '#ffffff', fontFamily: 'Arial' };
+    const hudFont = { fontSize: '36px', color: '#ffffff', fontFamily: FONT };
     this.scoreText = this.add.text(30, 24, '점수: 0', hudFont);
     this.levelText = this.add.text(width / 2, 24, '레벨 1', {
       ...hudFont, color: '#fdd835',
@@ -151,17 +171,17 @@ export default class GameScene extends Phaser.Scene {
     const barW = width - 60;
     this.expBg   = this.add.rectangle(30, 90, barW, 14, 0x333333).setOrigin(0, 0.5);
     this.expFill = this.add.rectangle(30, 90, 0, 14, 0x00ff88).setOrigin(0, 0.5);
-    this.add.text(30, 106, 'EXP', { fontSize: '22px', color: '#888888', fontFamily: 'Arial' });
+    this.add.text(30, 106, 'EXP', { fontSize: '22px', color: '#888888', fontFamily: FONT });
 
     // Shield indicator
     this.shieldText = this.add.text(width - 30, 60, '', {
-      fontSize: '28px', color: '#00ffff', fontFamily: 'Arial',
+      fontSize: '28px', color: '#00ffff', fontFamily: FONT,
     }).setOrigin(1, 0).setVisible(false);
 
     const isMobile = !this.sys.game.device.os.desktop;
     this.launchMsg = isMobile ? '탭하여 발사' : '클릭 또는 SPACE로 발사';
     this.promptText = this.add.text(width / 2, height / 2, this.launchMsg, {
-      fontSize: '42px', color: '#aaaaaa', fontFamily: 'Arial',
+      fontSize: '42px', color: '#aaaaaa', fontFamily: FONT,
     }).setOrigin(0.5);
 
     // Summon button (bottom-right)
@@ -169,10 +189,10 @@ export default class GameScene extends Phaser.Scene {
     this._summonBtnBounds = { x: btnX - 80, y: btnY - 35, w: 160, h: 70 };
     this._summonBg = this.add.rectangle(btnX, btnY, 160, 70, 0x1565c0, 0.85).setDepth(10);
     this._summonLabel = this.add.text(btnX, btnY - 8, '+ 볼', {
-      fontSize: '30px', color: '#ffffff', fontFamily: 'Arial', fontStyle: 'bold',
+      fontSize: '30px', color: '#ffffff', fontFamily: FONT, fontStyle: 'bold',
     }).setOrigin(0.5).setDepth(10);
     this._summonCdText = this.add.text(btnX, btnY + 18, '[X]', {
-      fontSize: '22px', color: '#90caf9', fontFamily: 'Arial',
+      fontSize: '22px', color: '#90caf9', fontFamily: FONT,
     }).setOrigin(0.5).setDepth(10);
 
     // Controls
@@ -182,6 +202,18 @@ export default class GameScene extends Phaser.Scene {
     this.input.keyboard.on('keydown-X',     this.onAddBall,  this);
     this.input.on('pointerdown', this.onLaunch, this);
     this.input.on('pointermove', p => { if (!this.gameOver) this.movePaddleTo(p.x); });
+
+    // ── Capacitor native integrations ────────────────────────────────────
+    StatusBar.setStyle({ style: Style.Dark }).catch(() => {});
+    StatusBar.hide().catch(() => {});
+
+    this._backBtnListener = App.addListener('backButton', () => {
+      if (!this.gameOver) this.togglePause();
+    });
+
+    this._appStateListener = App.addListener('appStateChange', ({ isActive }) => {
+      if (!isActive && !this.gameOver) this.togglePause();
+    });
 
     // Seed 1 sparse starting row
     this.spawnBrickRow();
@@ -303,6 +335,8 @@ export default class GameScene extends Phaser.Scene {
     // Reset momentum combo
     if (this.momentum) { ball.combo = 0; ball.clearTint(); }
 
+    playSound('paddle_hit');
+    Haptics.impact({ style: ImpactStyle.Light }).catch(() => {});
     this._burst(ball.x, ball.y);
 
     // Nova Burst: expanding shockwave hitting nearby bricks
@@ -350,12 +384,14 @@ export default class GameScene extends Phaser.Scene {
 
   damageBrick(brick, dmg) {
     brick.hp -= dmg;
+    playSound('brick_hit');
     brick.setAlpha(0.3 + Math.max(0, brick.hp / brick.maxHp) * 0.7);
     if (brick.hp <= 0) {
       const bx = brick.x, by = brick.y;
       brick.destroy();
       this.score += 10;
       this.scoreText.setText(`점수: ${this.score}`);
+      playSound('brick_break');
       this._burst(bx, by);
       this.addExp(EXP_PER_KILL);
 
@@ -381,6 +417,7 @@ export default class GameScene extends Phaser.Scene {
       this.expFill.width = 0;
       this.level++;
       this.levelText.setText(`레벨 ${this.level}`);
+      playSound('level_up');
       this.scene.pause();
       this.scene.launch('PerkScene', { perks: this._getPerkOptions() });
     }
@@ -532,6 +569,8 @@ export default class GameScene extends Phaser.Scene {
   }
 
   applyPerk(id) {
+    this.collectedPerks.push(id);
+
     // Common
     if (id === 'magnetBar' && this.magnetBarStacks < 3) {
       this.magnetBarStacks++;
@@ -612,7 +651,7 @@ export default class GameScene extends Phaser.Scene {
     this._placeBallOnPaddle();
     this.promptText.setText(this.launchMsg).setVisible(true);
 
-    const cooldown = Math.max(3000, ADD_BALL_COOLDOWN - this.quickSummonStacks * 3000);
+    const cooldown = Math.max(3000, this._addBallCooldownBase - this.quickSummonStacks * 3000);
     this.summonCooldown = cooldown;
     this._updateSummonBtn();
   }
@@ -645,7 +684,7 @@ export default class GameScene extends Phaser.Scene {
         return;
       }
     }
-    if (this.gameOver) { this.scene.restart(); return; }
+    if (this.gameOver) return;
     if (!this.pendingBall) return;
 
     const ball = this.pendingBall;
@@ -731,6 +770,8 @@ export default class GameScene extends Phaser.Scene {
       }
     });
 
+    playSound('bomb');
+
     // Orange blast
     const emitter = this.add.particles(x, y, 'ball', {
       speed: { min: 80, max: 300 },
@@ -755,6 +796,8 @@ export default class GameScene extends Phaser.Scene {
         this.damageBrick(brick, 1);
       }
     });
+
+    playSound('nova_burst');
 
     // Expanding ring
     const ring = this.add.circle(x, y, 10, 0x00ffff, 0);
@@ -796,6 +839,7 @@ export default class GameScene extends Phaser.Scene {
   }
 
   _freezeBricks() {
+    playSound('time_freeze');
     this.isFrozen    = true;
     this.freezeTimer = 800;
 
@@ -951,6 +995,7 @@ export default class GameScene extends Phaser.Scene {
         if (this.shieldCharged) {
           this.shieldCharged = false;
           this.shieldTimer   = this._shieldRechargeTime();
+          playSound('shield_reflect');
           ball.y = this.scale.height - 80;
           const spd = BALL_SPEED * this.ballSpeedMult;
           ball.body.setVelocity(Phaser.Math.Between(-200, 200), -spd);
@@ -1006,15 +1051,34 @@ export default class GameScene extends Phaser.Scene {
     });
 
     const { width, height } = this.scale;
-    this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.7);
-    this.add.text(width / 2, height / 2 - 140, '게임 오버', {
-      fontSize: '108px', fontStyle: 'bold', color: '#e53935', fontFamily: 'Arial',
-    }).setOrigin(0.5);
-    this.add.text(width / 2, height / 2, `점수: ${this.score}`, {
-      fontSize: '64px', color: '#ffffff', fontFamily: 'Arial',
-    }).setOrigin(0.5);
-    this.add.text(width / 2, height / 2 + 140, this.launchMsg.replace('발사', '다시 시작'), {
-      fontSize: '40px', color: '#aaaaaa', fontFamily: 'Arial',
-    }).setOrigin(0.5);
+
+    // Clean up Capacitor listeners
+    this._backBtnListener?.remove();
+    this._appStateListener?.remove();
+
+    playSound('game_over');
+
+    // Best score persistence
+    const prev = parseInt(localStorage.getItem('fo_best') || '0', 10);
+    const isNewBest = this.score > prev;
+    if (isNewBest) localStorage.setItem('fo_best', String(this.score));
+
+    // Shards earned
+    const shardsEarned = Math.floor(this.score / 100);
+    const totalShards  = parseInt(localStorage.getItem('fo_shards') || '0', 10) + shardsEarned;
+    localStorage.setItem('fo_shards', String(totalShards));
+
+    const timeSurvived = Math.floor((this.time.now - this.startTime) / 1000);
+
+    this.scene.start('RunSummaryScene', {
+      score:          this.score,
+      level:          this.level,
+      timeSurvived,
+      collectedPerks: [...this.collectedPerks],
+      isNewBest,
+      prevBest:       prev,
+      shardsEarned,
+      totalShards,
+    });
   }
 }

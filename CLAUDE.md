@@ -8,6 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm run dev       # Start Vite dev server at http://localhost:5173
 npm run build     # Production build to dist/
 npm run preview   # Preview the production build locally
+npm run android   # Build + copy to Capacitor + open Android Studio
 ```
 ## Git Commit Message Rules
 
