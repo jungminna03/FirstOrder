@@ -48,9 +48,25 @@ Optional longer explanation if needed.
 
 - **항상 Edit(diff) 방식으로 파일 수정** — 완전 재작성이 필요한 경우에만 Write 사용.
 
+## Agent Team
+
+See [`docs/AGENT_TEAM.md`](docs/AGENT_TEAM.md) for the full agent team structure (roles, workflow, rules).
+
+**모든 작업은 반드시 아래 팀 워크플로우를 따른다:**
+
+1. **Researcher** — 새 시스템·콘텐츠 기획이 포함된 경우 먼저 레퍼런스/아이디어를 수집하고 사용자에게 공유한다.
+2. **Architect** — 작업 시작 전 구조/기능 설계를 수립하고 사용자에게 확인받는다.
+3. **Level Designer** — 게임 밸런스·레벨·카드/퍽 변경이 포함된 경우 반드시 참여한다.
+4. **Coder** — 확인된 설계를 바탕으로 구현한다.
+5. **Reviewer** — 구현 완료 후 코드 품질·중복·단순화 관점에서 검토한다.
+6. **Docs** — 메커니즘·레벨 데이터가 변경된 경우 `MECHANICS.md`, `LEVELDESIGN.md`, `CLAUDE.md`를 갱신한다.
+
+단순 질문·조회성 작업(파일 읽기, 설명 요청 등)은 워크플로우를 생략한다.
+
 ## Project Specification
 
 See [`docs/MECHANICS.md`](docs/MECHANICS.md) for the full game mechanics spec (scenes, paddle, ball, bricks, scoring, lives, pause system, end states, controls). Update that file whenever mechanics change.
+See [`docs/LEVELDESIGN.md`](docs/LEVELDESIGN.md) for wave, card/perk balance, and difficulty design. Update that file whenever level or balance changes.
 
 ## Architecture
 

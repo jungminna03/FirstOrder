@@ -63,6 +63,8 @@ export default class GameScene extends Phaser.Scene {
     this.level           = 1;
     this.startTime       = this.time.now;
     this.collectedPerks  = [];
+    this._moveLeft       = false;
+    this._moveRight      = false;
     this.descentSpeed    = DESCENT_SPEED;
     this.spawnDelay      = SPAWN_DELAY_INIT;
     this.ballDamage      = 1;
@@ -104,6 +106,12 @@ export default class GameScene extends Phaser.Scene {
     this.hydraBar = false;
     this.timeStop = false;
 
+    // ── Gem tracking ─────────────────────────────────────────────────────
+    this.brickKillCount = 0;
+    this.brickGems      = 0;
+    this.survivalGems   = 0;
+    this.waveGems       = 0;
+
     // ── Freeze state (timeStop) ──────────────────────────────────────────
     this.isFrozen    = false;
     this.freezeTimer = 0;
@@ -115,11 +123,15 @@ export default class GameScene extends Phaser.Scene {
     const upgSpeed  = parseInt(localStorage.getItem('fo_upg_speed')  || '0', 10);
     const upgPaddle = parseInt(localStorage.getItem('fo_upg_paddle') || '0', 10);
     const upgSpawn  = parseInt(localStorage.getItem('fo_upg_spawn')  || '0', 10);
+    const upgDamage = parseInt(localStorage.getItem('fo_upg_damage') || '0', 10);
+    const upgGem    = parseInt(localStorage.getItem('fo_upg_gem')    || '0', 10);
     if (upgSpeed  > 0) this.ballSpeedMult = 1.0 + upgSpeed  * 0.05;
+    if (upgDamage > 0) this.ballDamage   += upgDamage;
+    this._gemMult             = 1 + upgGem * 0.2;
     this._addBallCooldownBase = ADD_BALL_COOLDOWN - upgSpawn * 1000;
 
     // Paddle
-    this.paddle = this.physics.add.image(width / 2, height - 100, 'paddle')
+    this.paddle = this.physics.add.image(width / 2, height - 130, 'paddle')
       .setImmovable(true)
       .setCollideWorldBounds(true);
     this.paddle.body.allowGravity = false;
@@ -173,35 +185,72 @@ export default class GameScene extends Phaser.Scene {
     this.expFill = this.add.rectangle(30, 90, 0, 14, 0x00ff88).setOrigin(0, 0.5);
     this.add.text(30, 106, 'EXP', { fontSize: '22px', color: '#888888', fontFamily: FONT });
 
-    // Shield indicator
-    this.shieldText = this.add.text(width - 30, 60, '', {
+    // Shield indicator (좌측으로 이동)
+    this.shieldText = this.add.text(30, 115, '', {
       fontSize: '28px', color: '#00ffff', fontFamily: FONT,
-    }).setOrigin(1, 0).setVisible(false);
+    }).setOrigin(0, 0.5).setVisible(false);
 
-    const isMobile = !this.sys.game.device.os.desktop;
-    this.launchMsg = isMobile ? '탭하여 발사' : '클릭 또는 SPACE로 발사';
-    this.promptText = this.add.text(width / 2, height / 2, this.launchMsg, {
+    // Pause button (우상단)
+    const pauseRect = this.add.rectangle(width - 80, 40, 130, 70, 0x222244, 0.9)
+      .setInteractive({ useHandCursor: true }).setDepth(20);
+    this.add.text(width - 80, 40, '일시정지', {
+      fontSize: '24px', color: '#aaaaaa', fontFamily: FONT,
+    }).setOrigin(0.5).setDepth(20);
+    pauseRect.on('pointerdown', () => this.togglePause());
+
+    this.launchMsg = 'SPACE 또는 발사 버튼';
+    this.promptText = this.add.text(width / 2, height / 2, '발사 버튼을 눌러주세요', {
       fontSize: '42px', color: '#aaaaaa', fontFamily: FONT,
     }).setOrigin(0.5);
 
-    // Summon button (bottom-right)
-    const btnX = width - 90, btnY = height - 60;
-    this._summonBtnBounds = { x: btnX - 80, y: btnY - 35, w: 160, h: 70 };
-    this._summonBg = this.add.rectangle(btnX, btnY, 160, 70, 0x1565c0, 0.85).setDepth(10);
-    this._summonLabel = this.add.text(btnX, btnY - 8, '+ 볼', {
-      fontSize: '30px', color: '#ffffff', fontFamily: FONT, fontStyle: 'bold',
+    // ── 하단 컨트롤 바 ────────────────────────────────────────────────────
+    const barY = height - 50;
+    this.add.rectangle(width / 2, barY, width, 100, 0x111122).setDepth(10);
+
+    // ◄ 왼쪽 버튼
+    const leftBtn = this.add.rectangle(120, barY, 240, 100, 0x1a3a6a)
+      .setInteractive({ useHandCursor: true }).setDepth(10);
+    this.add.text(120, barY, '◄', {
+      fontSize: '52px', color: '#ffffff', fontFamily: FONT,
     }).setOrigin(0.5).setDepth(10);
-    this._summonCdText = this.add.text(btnX, btnY + 18, '[X]', {
+    leftBtn.on('pointerdown', () => { this._moveLeft = true;  leftBtn.setFillStyle(0x2255aa); });
+    leftBtn.on('pointerup',   () => { this._moveLeft = false; leftBtn.setFillStyle(0x1a3a6a); });
+    leftBtn.on('pointerout',  () => { this._moveLeft = false; leftBtn.setFillStyle(0x1a3a6a); });
+
+    // 발사 버튼
+    this._launchBtn = this.add.rectangle(400, barY, 280, 100, 0x555555, 0.6)
+      .setInteractive({ useHandCursor: true }).setDepth(10);
+    this._launchBtnLabel = this.add.text(400, barY, '발사', {
+      fontSize: '40px', fontStyle: 'bold', color: '#666666', fontFamily: FONT,
+    }).setOrigin(0.5).setDepth(10);
+    this._launchBtn.on('pointerdown', () => this._onLaunchBtn());
+
+    // +볼 버튼
+    this._summonBtn = this.add.rectangle(660, barY, 200, 100, 0x1565c0, 0.85)
+      .setInteractive({ useHandCursor: true }).setDepth(10);
+    this._summonLabel = this.add.text(660, barY - 14, '+ 볼', {
+      fontSize: '28px', fontStyle: 'bold', color: '#ffffff', fontFamily: FONT,
+    }).setOrigin(0.5).setDepth(10);
+    this._summonCdText = this.add.text(660, barY + 18, '[X]', {
       fontSize: '22px', color: '#90caf9', fontFamily: FONT,
     }).setOrigin(0.5).setDepth(10);
+    this._summonBtn.on('pointerdown', () => this.onAddBall());
 
-    // Controls
+    // ► 오른쪽 버튼
+    const rightBtn = this.add.rectangle(900, barY, 240, 100, 0x1a3a6a)
+      .setInteractive({ useHandCursor: true }).setDepth(10);
+    this.add.text(900, barY, '►', {
+      fontSize: '52px', color: '#ffffff', fontFamily: FONT,
+    }).setOrigin(0.5).setDepth(10);
+    rightBtn.on('pointerdown', () => { this._moveRight = true;  rightBtn.setFillStyle(0x2255aa); });
+    rightBtn.on('pointerup',   () => { this._moveRight = false; rightBtn.setFillStyle(0x1a3a6a); });
+    rightBtn.on('pointerout',  () => { this._moveRight = false; rightBtn.setFillStyle(0x1a3a6a); });
+
+    // Controls (키보드 유지, 포인터 전역 이벤트 제거)
     this.cursors = this.input.keyboard.createCursorKeys();
-    this.input.keyboard.on('keydown-SPACE', this.onLaunch, this);
+    this.input.keyboard.on('keydown-SPACE', () => this._onLaunchBtn(), this);
     this.input.keyboard.on('keydown-ESC',   this.togglePause, this);
     this.input.keyboard.on('keydown-X',     this.onAddBall,  this);
-    this.input.on('pointerdown', this.onLaunch, this);
-    this.input.on('pointermove', p => { if (!this.gameOver) this.movePaddleTo(p.x); });
 
     // ── Capacitor native integrations ────────────────────────────────────
     StatusBar.setStyle({ style: Style.Dark }).catch(() => {});
@@ -223,6 +272,7 @@ export default class GameScene extends Phaser.Scene {
     this.time.addEvent({
       delay: 30000, loop: true,
       callback: () => {
+        this.survivalGems++;
         this.pressureTick++;
         if (this.pressureTick <= 6) {
           this.descentSpeed += 10;
@@ -250,6 +300,7 @@ export default class GameScene extends Phaser.Scene {
 
   spawnBrickRow() {
     this.waveCount++;
+    if (this.waveCount % 20 === 0) this.waveGems++;
     const density  = Math.min(1.0, 0.08 + (this.waveCount - 1) * 0.012);
     const hp       = this.brickHp;
     const colorIdx = this.colorIndex % ROW_COLORS.length;
@@ -391,6 +442,8 @@ export default class GameScene extends Phaser.Scene {
       brick.destroy();
       this.score += 10;
       this.scoreText.setText(`점수: ${this.score}`);
+      this.brickKillCount++;
+      if (this.brickKillCount % 10 === 0) this.brickGems++;
       playSound('brick_break');
       this._burst(bx, by);
       this.addExp(EXP_PER_KILL);
@@ -653,18 +706,33 @@ export default class GameScene extends Phaser.Scene {
 
     const cooldown = Math.max(3000, this._addBallCooldownBase - this.quickSummonStacks * 3000);
     this.summonCooldown = cooldown;
-    this._updateSummonBtn();
+    this._updateControlBar();
   }
 
-  _updateSummonBtn() {
+  _updateControlBar() {
+    // +볼 버튼
     const onCd = this.summonCooldown > 0 || !!this.pendingBall;
-    this._summonBg.setFillStyle(onCd ? 0x424242 : 0x1565c0, 0.85);
+    this._summonBtn.setFillStyle(onCd ? 0x424242 : 0x1565c0, 0.85);
     this._summonLabel.setColor(onCd ? '#888888' : '#ffffff');
-    if (this.pendingBall) {
-      this._summonCdText.setText('대기 중');
-    } else {
-      this._summonCdText.setText(onCd ? `${Math.ceil(this.summonCooldown / 1000)}s` : '[X]');
-    }
+    this._summonCdText.setText(
+      this.pendingBall ? '대기 중' : (onCd ? `${Math.ceil(this.summonCooldown / 1000)}s` : '[X]'),
+    );
+
+    // 발사 버튼
+    const canLaunch = !!this.pendingBall && !this.gameOver;
+    this._launchBtn.setFillStyle(canLaunch ? 0x2e7d32 : 0x555555, canLaunch ? 1.0 : 0.6);
+    this._launchBtnLabel.setColor(canLaunch ? '#ffffff' : '#666666');
+  }
+
+  _onLaunchBtn() {
+    if (this.gameOver || !this.pendingBall) return;
+    const ball = this.pendingBall;
+    this.pendingBall = null;
+    this.promptText.setVisible(false);
+    // 항상 정위로 발사 (초반 방어 최적화)
+    ball.body.setVelocity(0, -(BALL_SPEED * this.ballSpeedMult));
+    this._syncBrickSpeed();
+    this._updateControlBar();
   }
 
   togglePause() {
@@ -675,25 +743,8 @@ export default class GameScene extends Phaser.Scene {
 
   // ─── Input ────────────────────────────────────────────────────────────────
 
-  onLaunch(pointer) {
-    if (pointer && pointer.x !== undefined) {
-      const b = this._summonBtnBounds;
-      if (pointer.x >= b.x && pointer.x <= b.x + b.w &&
-          pointer.y >= b.y && pointer.y <= b.y + b.h) {
-        this.onAddBall();
-        return;
-      }
-    }
-    if (this.gameOver) return;
-    if (!this.pendingBall) return;
-
-    const ball = this.pendingBall;
-    this.pendingBall = null;
-    this.promptText.setVisible(false);
-    ball.body.setVelocity(Phaser.Math.Between(-200, 200), -(BALL_SPEED * this.ballSpeedMult));
-    this._syncBrickSpeed();
-    this._updateSummonBtn();
-  }
+  // onLaunch은 키보드 SPACE에서 _onLaunchBtn()으로 리디렉션됨 (레거시 호환용 유지)
+  onLaunch() { this._onLaunchBtn(); }
 
   movePaddleTo(x) {
     const half = this.paddle.displayWidth / 2;
@@ -912,23 +963,25 @@ export default class GameScene extends Phaser.Scene {
   update(time, delta) {
     if (this.gameOver) return;
 
-    // Paddle keyboard
+    // Paddle movement (keyboard + UI buttons)
     const kspeed = 1000;
-    if (this.cursors.left.isDown) {
+    const goLeft  = this.cursors.left.isDown  || this._moveLeft;
+    const goRight = this.cursors.right.isDown || this._moveRight;
+    if (goLeft) {
       this.paddle.body.setVelocityX(-kspeed);
-    } else if (this.cursors.right.isDown) {
+    } else if (goRight) {
       this.paddle.body.setVelocityX(kspeed);
     } else {
       this.paddle.body.setVelocityX(0);
     }
-    this.paddle.y = this.scale.height - 100;
+    this.paddle.y = this.scale.height - 130;
     this.paddle.body.setVelocityY(0);
     if (this.pendingBall) this.pendingBall.x = this.paddle.x;
 
     // Summon cooldown tick
     if (this.summonCooldown > 0) {
       this.summonCooldown = Math.max(0, this.summonCooldown - delta);
-      this._updateSummonBtn();
+      this._updateControlBar();
     }
 
     // Freeze timer
@@ -996,7 +1049,7 @@ export default class GameScene extends Phaser.Scene {
           this.shieldCharged = false;
           this.shieldTimer   = this._shieldRechargeTime();
           playSound('shield_reflect');
-          ball.y = this.scale.height - 80;
+          ball.y = this.scale.height - 170;
           const spd = BALL_SPEED * this.ballSpeedMult;
           ball.body.setVelocity(Phaser.Math.Between(-200, 200), -spd);
           ball.paddleCooldown = 200;
@@ -1032,7 +1085,7 @@ export default class GameScene extends Phaser.Scene {
           if (b.active) b.body.setVelocityY(0);
         });
       }
-      this._updateSummonBtn();
+      this._updateControlBar();
     }
 
     // Destroy bricks that slip past bottom
@@ -1063,10 +1116,11 @@ export default class GameScene extends Phaser.Scene {
     const isNewBest = this.score > prev;
     if (isNewBest) localStorage.setItem('fo_best', String(this.score));
 
-    // Shards earned
-    const shardsEarned = Math.floor(this.score / 100);
-    const totalShards  = parseInt(localStorage.getItem('fo_shards') || '0', 10) + shardsEarned;
-    localStorage.setItem('fo_shards', String(totalShards));
+    // Gems earned (3 sources × gem multiplier from upgrade)
+    const rawGems    = this.brickGems + this.survivalGems + this.waveGems;
+    const gemsEarned = Math.floor(rawGems * this._gemMult);
+    const totalGems  = parseInt(localStorage.getItem('fo_gems') || '0', 10) + gemsEarned;
+    localStorage.setItem('fo_gems', String(totalGems));
 
     const timeSurvived = Math.floor((this.time.now - this.startTime) / 1000);
 
@@ -1077,8 +1131,11 @@ export default class GameScene extends Phaser.Scene {
       collectedPerks: [...this.collectedPerks],
       isNewBest,
       prevBest:       prev,
-      shardsEarned,
-      totalShards,
+      brickGems:      this.brickGems,
+      survivalGems:   this.survivalGems,
+      waveGems:       this.waveGems,
+      gemsEarned,
+      totalGems,
     });
   }
 }

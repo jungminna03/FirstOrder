@@ -47,35 +47,63 @@ export default class RunSummaryScene extends Phaser.Scene {
     }
 
     // Divider
-    this.add.rectangle(width / 2, height * 0.30, width - 80, 2, 0x333355);
+    this.add.rectangle(width / 2, height * 0.28, width - 80, 2, 0x333355);
 
     // Stats
-    const statY  = height * 0.34;
-    const statGap = 90;
+    const statY   = height * 0.31;
+    const statGap = 80;
     const fmt = s => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 
     this._stat(width / 2, statY,           '생존 시간', fmt(d.timeSurvived));
     this._stat(width / 2, statY + statGap, '최종 레벨', `${d.level}`);
-    this._stat(width / 2, statY + statGap * 2, '획득 샤드', `+${d.shardsEarned} 💎 (누적: ${d.totalShards})`);
+
+    // Gem breakdown card
+    const gemCardY = statY + statGap * 2 + 30;
+    this.add.rectangle(width / 2, gemCardY + 60, width - 80, 200, 0x111133)
+      .setStrokeStyle(2, 0x4fc3f7, 0.6);
+    this.add.text(width / 2, gemCardY, '💎 이번 판 잼 획득', {
+      fontSize: '32px', color: '#4fc3f7', fontFamily: FONT,
+    }).setOrigin(0.5);
+
+    // 3-source breakdown
+    const srcY = gemCardY + 50;
+    const srcData = [
+      { label: '브릭', value: d.brickGems },
+      { label: '생존', value: d.survivalGems },
+      { label: '웨이브', value: d.waveGems },
+    ];
+    const colW3 = (width - 80) / 3;
+    srcData.forEach((s, i) => {
+      const cx = 40 + colW3 * i + colW3 / 2;
+      this.add.text(cx, srcY, `${s.label}`, {
+        fontSize: '26px', color: '#666688', fontFamily: FONT,
+      }).setOrigin(0.5);
+      this.add.text(cx, srcY + 44, `+${s.value}`, {
+        fontSize: '36px', color: '#ffffff', fontFamily: FONT,
+      }).setOrigin(0.5);
+    });
+
+    this.add.text(width / 2, gemCardY + 140, `총 +${d.gemsEarned} 💎  (누적: ${d.totalGems})`, {
+      fontSize: '34px', color: '#fdd835', fontFamily: FONT,
+    }).setOrigin(0.5);
 
     // Divider
-    this.add.rectangle(width / 2, height * 0.58, width - 80, 2, 0x333355);
+    this.add.rectangle(width / 2, height * 0.60, width - 80, 2, 0x333355);
 
     // Perks collected
-    this.add.text(width / 2, height * 0.61, '이번 런 퍽', {
-      fontSize: '34px', color: '#888888', fontFamily: FONT,
+    this.add.text(width / 2, height * 0.62, '이번 런 퍽', {
+      fontSize: '32px', color: '#888888', fontFamily: FONT,
     }).setOrigin(0.5);
 
     if (d.collectedPerks.length === 0) {
       this.add.text(width / 2, height * 0.67, '없음', {
-        fontSize: '34px', color: '#444466', fontFamily: FONT,
+        fontSize: '32px', color: '#444466', fontFamily: FONT,
       }).setOrigin(0.5);
     } else {
-      // Deduplicate with counts
       const counts = {};
       d.collectedPerks.forEach(id => { counts[id] = (counts[id] || 0) + 1; });
       const entries = Object.entries(counts);
-      const cols = 3, rowH = 56, colW = 320;
+      const cols = 3, rowH = 52, colW = 320;
       const startX = width / 2 - colW * (Math.min(cols, entries.length) - 1) / 2;
 
       entries.forEach(([id, cnt], i) => {
@@ -83,16 +111,19 @@ export default class RunSummaryScene extends Phaser.Scene {
         const cy = height * 0.67 + Math.floor(i / cols) * rowH;
         const label = PERK_LABELS[id] || id;
         this.add.text(cx, cy, cnt > 1 ? `${label} ×${cnt}` : label, {
-          fontSize: '28px', color: '#aaaacc', fontFamily: FONT,
+          fontSize: '26px', color: '#aaaacc', fontFamily: FONT,
         }).setOrigin(0.5);
       });
     }
 
     // Buttons
-    this._makeButton(width / 2, height * 0.86, '다시 시작', 0x1565c0, () => {
+    this._makeButton(width / 2, height * 0.83, '다시 시작', 0x1565c0, () => {
       this.scene.start('GameScene');
     });
-    this._makeButton(width / 2, height * 0.94, '메인 메뉴', 0x333355, () => {
+    this._makeButton(width / 2, height * 0.90, '업그레이드', 0x4a3800, () => {
+      this.scene.start('UpgradeScene');
+    });
+    this._makeButton(width / 2, height * 0.97, '메인 메뉴', 0x333355, () => {
       this.scene.start('MenuScene');
     });
   }

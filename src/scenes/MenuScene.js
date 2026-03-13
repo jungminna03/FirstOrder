@@ -43,12 +43,12 @@ export default class MenuScene extends Phaser.Scene {
     }).setOrigin(0.5);
 
     // Best score
-    const best   = parseInt(localStorage.getItem('fo_best')   || '0', 10);
-    const shards = parseInt(localStorage.getItem('fo_shards') || '0', 10);
+    const best = parseInt(localStorage.getItem('fo_best')  || '0', 10);
+    const gems = parseInt(localStorage.getItem('fo_gems') || '0', 10);
     this.add.text(width / 2, height * 0.48, `최고 점수: ${best}`, {
       fontSize: '44px', color: '#fdd835', fontFamily: FONT,
     }).setOrigin(0.5);
-    this.add.text(width / 2, height * 0.54, `💎 ${shards} 샤드`, {
+    this.add.text(width / 2, height * 0.54, `💎 ${gems} 잼`, {
       fontSize: '36px', color: '#8888aa', fontFamily: FONT,
     }).setOrigin(0.5);
 
